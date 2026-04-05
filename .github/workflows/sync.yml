@@ -1,9 +1,7 @@
 name: Sync to GitLab
 on:
-  push:
-    branches: [master]
   schedule:
-    - cron: '0 3 * * *'
+    - cron: '0 2 * * *'
   workflow_dispatch:
 jobs:
   sync:
@@ -11,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           submodules: false
       - name: Push to GitLab
         env:
@@ -19,5 +17,14 @@ jobs:
         run: |
           ENCODED_TOKEN=$(python3 -c 'import urllib.parse,os; print(urllib.parse.quote(os.environ["GITLAB_TOKEN"], safe=""))')
           git remote add gitlab "https://oauth2:${ENCODED_TOKEN}@git.bit-group.co/bit-group/estatego/apps/estatego-core-server.git"
-          git config http.postBuffer 524288000
+          git config http.postBuffer 2147483648
+          git config http.lowSpeedLimit 0
+          git config http.lowSpeedTime 999999
+          # Push in Chunks von 500 Commits
+          TOTAL=$(git rev-list --count HEAD)
+          CHUNK=500
+          for i in $(seq $TOTAL -$CHUNK 1); do
+            HASH=$(git rev-list HEAD~$((i > CHUNK ? i - CHUNK : 0))..HEAD~$((i > 0 ? i - 1 : 0)) | tail -1)
+            git push gitlab ${HASH}:refs/heads/main 2>/dev/null || true
+          done
           git push gitlab master:main --force
